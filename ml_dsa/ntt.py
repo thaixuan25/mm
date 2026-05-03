@@ -1,0 +1,110 @@
+"""Number Theoretic Transform cho `Z_q[X]/(X^n+1)`.
+
+Cài đặt theo FIPS 204 §B.2 (Algorithm 41/42): in-place Cooley-Tukey ở
+miền NTT, dùng bảng `zetas` được sinh từ ζ = 1753 và phép đảo bit 8 bit.
+
+NTT(a) trả về vector các giá trị `a(ζ^{2·BitRev_8(k)+1})` cho `k = 0..255`,
+nhưng được truy cập theo thứ tự bit-reversed nên ta chỉ cần bảng zetas
+truyền thống.
+"""
+
+from __future__ import annotations
+
+from typing import List
+
+from ml_dsa.params import N, Q, ZETA
+from ml_dsa.poly import Poly
+
+
+def _bitrev8(k: int) -> int:
+    return int(f"{k:08b}"[::-1], 2)
+
+
+def _build_zetas() -> List[int]:
+    return [pow(ZETA, _bitrev8(i), Q) for i in range(N)]
+
+
+ZETAS: List[int] = _build_zetas()
+N_INV: int = pow(N, -1, Q)
+
+
+def ntt(a: Poly) -> Poly:
+    """Forward NTT (Algorithm 41), trả về list mới (không in-place)."""
+    w = list(a)
+    k = 0
+    length = N // 2
+    while length >= 1:
+        start = 0
+        while start < N:
+            k += 1
+            z = ZETAS[k]
+            for j in range(start, start + length):
+                t = (z * w[j + length]) % Q
+                w[j + length] = (w[j] - t) % Q
+                w[j] = (w[j] + t) % Q
+            start += 2 * length
+        length //= 2
+    return w
+
+
+def intt(a: Poly) -> Poly:
+    """Inverse NTT (Algorithm 42), trả về list mới."""
+    w = list(a)
+    k = N
+    length = 1
+    while length < N:
+        start = 0
+        while start < N:
+            k -= 1
+            z = (-ZETAS[k]) % Q
+            for j in range(start, start + length):
+                t = w[j]
+                w[j] = (t + w[j + length]) % Q
+                w[j + length] = (t - w[j + length]) % Q
+                w[j + length] = (z * w[j + length]) % Q
+            start += 2 * length
+        length *= 2
+    return [(x * N_INV) % Q for x in w]
+
+
+def ntt_pointwise(a: Poly, b: Poly) -> Poly:
+    """Nhân điểm-đến-điểm trong miền NTT (Algorithm 45)."""
+    return [(a[i] * b[i]) % Q for i in range(N)]
+
+
+def ntt_vec(v):
+    return [ntt(p) for p in v]
+
+
+def intt_vec(v):
+    return [intt(p) for p in v]
+
+
+def ntt_matvec(A_hat, s_hat):
+    """`Â ∘ ŝ` trong miền NTT.
+
+    `A_hat` là ma trận `k×l`, `s_hat` là vector `l`. Kết quả là vector `k`.
+    """
+    k = len(A_hat)
+    l = len(s_hat)
+    out = []
+    for i in range(k):
+        acc = [0] * N
+        for j in range(l):
+            prod = ntt_pointwise(A_hat[i][j], s_hat[j])
+            for t in range(N):
+                acc[t] = (acc[t] + prod[t]) % Q
+        out.append(acc)
+    return out
+
+
+__all__ = [
+    "ZETAS",
+    "N_INV",
+    "ntt",
+    "intt",
+    "ntt_pointwise",
+    "ntt_vec",
+    "intt_vec",
+    "ntt_matvec",
+]
