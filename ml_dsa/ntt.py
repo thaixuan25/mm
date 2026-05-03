@@ -1,11 +1,16 @@
-"""Number Theoretic Transform cho `Z_q[X]/(X^n+1)`.
+"""Number Theoretic Transform cho ``Z_q[X]/(X^n+1)``.
 
 Cài đặt theo FIPS 204 §B.2 (Algorithm 41/42): in-place Cooley-Tukey ở
-miền NTT, dùng bảng `zetas` được sinh từ ζ = 1753 và phép đảo bit 8 bit.
+miền NTT, dùng bảng ``zetas`` được sinh từ ζ = 1753 và phép đảo bit
+8 bit.
 
-NTT(a) trả về vector các giá trị `a(ζ^{2·BitRev_8(k)+1})` cho `k = 0..255`,
-nhưng được truy cập theo thứ tự bit-reversed nên ta chỉ cần bảng zetas
-truyền thống.
+NTT(a) trả về vector các giá trị ``a(ζ^{2·BitRev_8(k)+1})`` cho
+``k = 0..255``, nhưng được truy cập theo thứ tự bit-reversed nên ta
+chỉ cần bảng zetas truyền thống.
+
+Nhân đa thức trong NTT là phép nhân điểm-đến-điểm, do đó
+``a · b = INTT(NTT(a) ∘ NTT(b))``. Đây là lý do toàn bộ quy trình ký
+được thiết kế để ở miền NTT càng lâu càng tốt.
 """
 
 from __future__ import annotations
@@ -17,19 +22,33 @@ from ml_dsa.poly import Poly
 
 
 def _bitrev8(k: int) -> int:
+    """Đảo bit của ``k`` trong 8 bit thấp (cho ``k ∈ [0, 256)``).
+
+    Cách viết ``f"{k:08b}"[::-1]`` không hiệu quả nhưng rất rõ ý — bảng
+    zetas chỉ tính một lần khi import nên không ảnh hưởng hiệu năng.
+    """
     return int(f"{k:08b}"[::-1], 2)
 
 
 def _build_zetas() -> List[int]:
+    """Sinh bảng ``zetas[k] = ζ^{BitRev_8(k)} mod q`` (256 phần tử)."""
     return [pow(ZETA, _bitrev8(i), Q) for i in range(N)]
 
 
+# Bảng ``zetas`` được tính một lần khi module load và share toàn module.
 ZETAS: List[int] = _build_zetas()
+# ``N^{-1} mod q`` dùng trong INTT để chia cuối cùng.
 N_INV: int = pow(N, -1, Q)
 
 
 def ntt(a: Poly) -> Poly:
-    """Forward NTT (Algorithm 41), trả về list mới (không in-place)."""
+    """Forward NTT (Algorithm 41), trả về list mới (không in-place).
+
+    Thuật toán Cooley-Tukey: bắt đầu với ``length = N/2`` rồi chia đôi
+    sau mỗi tầng cho tới khi ``length == 0``. Mỗi tầng quét toàn bộ
+    đa thức theo "butterfly" ``(w[j], w[j+length]) → (w[j]+t, w[j]-t)``
+    với ``t = z · w[j+length]``.
+    """
     w = list(a)
     k = 0
     length = N // 2
@@ -48,7 +67,12 @@ def ntt(a: Poly) -> Poly:
 
 
 def intt(a: Poly) -> Poly:
-    """Inverse NTT (Algorithm 42), trả về list mới."""
+    """Inverse NTT (Algorithm 42), trả về list mới.
+
+    Đối ngẫu của ``ntt``: bắt đầu với ``length = 1`` rồi nhân đôi.
+    Cuối cùng nhân toàn bộ với ``N^{-1}`` để hoàn tất phép biến đổi
+    nghịch (theo định nghĩa NTT có hệ số chuẩn hoá 1/N).
+    """
     w = list(a)
     k = N
     length = 1
@@ -73,17 +97,22 @@ def ntt_pointwise(a: Poly, b: Poly) -> Poly:
 
 
 def ntt_vec(v):
+    """Áp ``ntt`` lên từng đa thức của vector."""
     return [ntt(p) for p in v]
 
 
 def intt_vec(v):
+    """Áp ``intt`` lên từng đa thức của vector."""
     return [intt(p) for p in v]
 
 
 def ntt_matvec(A_hat, s_hat):
-    """`Â ∘ ŝ` trong miền NTT.
+    """``Â ∘ ŝ`` trong miền NTT.
 
-    `A_hat` là ma trận `k×l`, `s_hat` là vector `l`. Kết quả là vector `k`.
+    ``A_hat`` là ma trận ``k×l``, ``s_hat`` là vector ``l``. Kết quả
+    là vector ``k`` với mỗi phần tử là tổng các tích pointwise theo cột.
+    Vòng lặp tích luỹ thủ công thay vì dùng ``poly_add`` để tránh tạo
+    list trung gian cho mỗi cột.
     """
     k = len(A_hat)
     l = len(s_hat)

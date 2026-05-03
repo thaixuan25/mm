@@ -1,4 +1,10 @@
-"""ML-DSA.Verify / Verify_internal (FIPS 204 §6.3, Algorithm 3 & 8)."""
+"""ML-DSA.Verify / Verify_internal (FIPS 204 §6.3, Algorithm 3 & 8).
+
+Verifier tái lập ``w1'`` từ ``z`` và ``c`` rồi kiểm tra
+``H(mu, w1') == c_tilde``. Vì verifier không có ``t0``, hint ``h``
+được dùng để bù phần sai lệch nhỏ giữa ``HighBits(w - c·s2)`` và
+``HighBits(A·z - c·t1·2^d)``.
+"""
 
 from __future__ import annotations
 
@@ -11,17 +17,31 @@ from ml_dsa.sampling import H_shake256, expand_a, sample_in_ball
 
 
 def _scale_t1(t1, factor):
+    """Nhân từng hệ số của vector ``t1`` với hằng số (mod q).
+
+    Trong verify ta cần ``t1 · 2^d`` để đối chiếu với ``A·z``, vì t1 là
+    phần "high" sau Power2Round.
+    """
     return [[(x * factor) % Q for x in p] for p in t1]
 
 
 def _hint_popcount(h):
+    """Đếm số bit hint = 1 toàn vector."""
     return sum(sum(p) for p in h)
 
 
 def verify_internal(
     pk: bytes, message_prime: bytes, sig: bytes, params: MLDSAParams
 ) -> bool:
-    """Verify_internal (Algorithm 8)."""
+    """Verify_internal (Algorithm 8).
+
+    Trả về True khi cả ba điều kiện sau cùng thỏa mãn:
+
+    1. ``sig`` decode hợp lệ và có popcount(h) ≤ omega.
+    2. ``||z||_∞ < γ1 - β``.
+    3. ``H(mu || w1Encode(UseHint(h, A·z - c·t1·2^d)))`` trùng với
+       ``c_tilde`` trong chữ ký.
+    """
     decoded_sig = sig_decode(sig, params)
     if decoded_sig is None:
         return False
@@ -41,6 +61,7 @@ def verify_internal(
     c = sample_in_ball(c_tilde, params)
     c_hat = ntt(c)
 
+    # Tính A·z - c·t1·2^d trong miền NTT để khớp với cách signer dựng w.
     z_hat = ntt_vec(z)
     Az_hat = ntt_matvec(A_hat, z_hat)
 
@@ -54,6 +75,8 @@ def verify_internal(
     ]
     w_approx = vec_reduce(intt_vec(diff_hat))
 
+    # UseHint phục hồi ``w1`` xấp xỉ; nếu hint chuẩn từ signer thì kết quả
+    # sẽ trùng với w1 ban đầu, từ đó c_tilde tái sinh đúng.
     w1_prime = vec_use_hint(h, w_approx, params.gamma2)
     c_tilde_prime = H_shake256(
         mu + w1_encode(w1_prime, params), params.c_tilde_bytes
@@ -63,6 +86,7 @@ def verify_internal(
 
 
 def _format_message_prime(message: bytes, ctx: bytes) -> bytes:
+    """Tiền xử lý thông điệp giống bên ký để băm cho ra cùng ``mu``."""
     if len(ctx) > 255:
         raise ValueError("ctx exceeds 255 bytes")
     return bytes([0, len(ctx)]) + ctx + message
@@ -76,7 +100,12 @@ def verify(
     *,
     ctx: bytes = b"",
 ) -> bool:
-    """ML-DSA.Verify (Algorithm 3)."""
+    """ML-DSA.Verify (Algorithm 3).
+
+    Hàm này từ chối thay vì raise khi gặp dữ liệu sai dạng (sai độ dài
+    pk/sig hoặc context > 255 byte) để hành vi xác thực luôn trả về bool
+    đơn giản, tránh tạo nhánh ngoại lệ ảnh hưởng tới timing.
+    """
     if len(ctx) > 255:
         return False
     if len(pk) != params.pk_bytes or len(sig) != params.sig_bytes:
