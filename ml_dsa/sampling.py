@@ -3,73 +3,39 @@ from __future__ import annotations
 import hashlib
 from typing import List, Optional, Tuple
 
-from .encoding import BitUnpack, IntegerToBytes
 from .params import MLDSAParams, N, Q
 from .poly import Poly, Vector
 
 
 class SHAKEStream:
-    """Stream bytes từ SHAKE-XOF.
+    """XOF stream wrapper for hashlib.shake_128 and hashlib.shake_256."""
 
-    ``hashlib`` không hỗ trợ squeeze tăng dần thực sự, nhưng
-    ``digest(n)`` trên cùng một đối tượng XOF luôn trả về cùng tiền tố.
-    Do đó ta giữ một buffer nội bộ và mở rộng khi cần thêm dữ liệu.
+    def __init__(self, shake_func, seed: bytes):
+        self.shake = shake_func(seed)
+        self.buffer = b""
+        self.offset = 0
 
-    Cách mở rộng buffer dùng tăng theo cấp số nhân (``len * 2``) với
-    sàn 168 byte (khớp với rate của SHAKE-128/256) để giảm số lần gọi
-    lại ``digest`` mà vẫn không tốn bộ nhớ vô lý.
-    """
+    def read(self, num_bytes: int) -> bytes:
+        needed = self.offset + num_bytes
+        if len(self.buffer) < needed:
+            chunk_size = max(needed * 2, 4096)
+            self.buffer = self.shake.digest(chunk_size)
 
-    def __init__(self, hash_fn, data: bytes):
-        self._hash_fn = hash_fn
-        # Bản sao chống ngoài-thay-đổi sau khi stream được khởi tạo.
-        self._data = bytes(data)
-        self._buffer = b""
-        self._pos = 0
-
-    def _ensure(self, end: int) -> None:
-        """Đảm bảo buffer đủ dài tới chỉ số ``end`` (re-digest nếu cần)."""
-        if end > len(self._buffer):
-            new_size = max(end, len(self._buffer) * 2, 168)
-            self._buffer = self._hash_fn(self._data).digest(new_size)
-
-    def read(self, n: int) -> bytes:
-        """Đọc ``n`` byte tiếp theo từ stream và dịch con trỏ."""
-        end = self._pos + n
-        self._ensure(end)
-        out = self._buffer[self._pos : end]
-        self._pos = end
-        return out
-
-
-def _shake256(data: bytes, length: int) -> bytes:
-    return hashlib.shake_256(data).digest(length)
-
-
-def _shake128(data: bytes, length: int) -> bytes:
-    return hashlib.shake_128(data).digest(length)
+        result = self.buffer[self.offset : needed]
+        self.offset += num_bytes
+        return result
 
 
 def CoeffFromThreeBytes(b0: int, b1: int, b2: int) -> Optional[int]:
-    """Diễn giải 3 byte thành hệ số trong ``[0, q)`` (Algorithm 14).
-
-    Bit cao của ``b2`` bị mask để giới hạn ``z < 2^{23}``. Nếu kết quả
-    rơi vào ``[q, 2^{23})`` thì trả về ``None`` để bên gọi lấy thử bộ
-    byte khác (rejection sampling).
-    """
-    z = b0 + 256 * b1 + 65536 * (b2 & 0x7F)
-    if z < Q:
-        return z
+    """Algorithm 14: CoeffFromThreeBytes."""
+    c = ((b2 & 0x7F) << 16) | (b1 << 8) | b0
+    if c < Q:
+        return c
     return None
 
 
 def CoeffFromHalfByte(b: int, eta: int) -> Optional[int]:
-    """Diễn giải nibble thành hệ số trong ``[-η, η]`` (Algorithm 15).
-
-    Đối với ``η = 2``: dùng các giá trị < 15, ánh xạ qua ``2 - (b mod 5)``
-    để cho phân phối đều trên ``[-2, 2]``. Đối với ``η = 4``: dùng
-    nibble < 9 và lấy ``4 - b``. Trường hợp khác trả ``None`` (reject).
-    """
+    """Algorithm 15: CoeffFromHalfByte."""
     if eta == 2 and b < 15:
         return 2 - (b % 5)
     if eta == 4 and b < 9:
@@ -78,142 +44,146 @@ def CoeffFromHalfByte(b: int, eta: int) -> Optional[int]:
 
 
 def RejNttPoly(seed: bytes) -> Poly:
-    """Sinh đa thức trong miền NTT bằng rejection sampling từ SHAKE-128.
-
-    Lặp lại đọc 3 byte tới khi thu được ``N`` hệ số hợp lệ. Vì xác suất
-    reject ≈ 1/64 mỗi mẫu nên độ dài stream cần thiết là vừa phải.
-    """
+    """Algorithm 30: RejNTTPoly."""
     stream = SHAKEStream(hashlib.shake_128, seed)
-    out: Poly = []
-    while len(out) < N:
-        chunk = stream.read(3)
-        z = CoeffFromThreeBytes(chunk[0], chunk[1], chunk[2])
-        if z is not None:
-            out.append(z)
-    return out
+    a: Poly = []
+
+    while len(a) < N:
+        buf = stream.read(3)
+        c = CoeffFromThreeBytes(buf[0], buf[1], buf[2])
+        if c is not None:
+            a.append(c)
+    return a
 
 
 def RejBoundedPoly(seed: bytes, eta: int) -> Poly:
-    """Trả về đa thức có hệ số trong ``[-η, η]`` (dạng balanced).
-
-    Các thao tác hạ nguồn (NTT, vec_add, vec_reduce) đều thực hiện
-    ``% Q`` nên giá trị âm vẫn an toàn. Việc giữ dạng balanced giúp
-    ``bit_pack`` hoạt động đúng theo đặc tả Algorithm 16
-    (đầu vào ∈ [-η, η]).
-    """
+    """Algorithm 31: RejBoundedPoly."""
     stream = SHAKEStream(hashlib.shake_256, seed)
-    out: Poly = []
-    while len(out) < N:
-        # Mỗi byte cho 2 nibble → tới 2 mẫu, giảm bớt số lần read.
+    a: Poly = []
+
+    while len(a) < N:
         z = stream.read(1)[0]
-        z0 = CoeffFromHalfByte(z & 0x0F, eta)
-        z1 = CoeffFromHalfByte(z >> 4, eta)
-        if z0 is not None:
-            out.append(z0)
-        if len(out) < N and z1 is not None:
-            out.append(z1)
-    return out
+        z0 = z & 0x0F
+        z1 = z >> 4
+
+        c0 = CoeffFromHalfByte(z0, eta)
+        if c0 is not None:
+            a.append(c0)
+
+        if len(a) >= N:
+            break
+
+        c1 = CoeffFromHalfByte(z1, eta)
+        if c1 is not None:
+            a.append(c1)
+    return a
 
 
 def ExpandA(rho: bytes, params: MLDSAParams) -> List[List[Poly]]:
-    """ExpandA (Algorithm 32): sinh ma trận ``A`` từ seed ``rho``.
-
-    Mỗi ô ``A[r][s]`` được sinh bằng RejNTTPoly với seed
-    ``rho || (s, r)``. Thứ tự byte ``(s, r)`` được giữ đúng đặc tả để
-    tương thích với KAT chính thức.
-    """
+    """Algorithm 32: ExpandA."""
     if len(rho) != 32:
-        raise ValueError("expand_a: rho must be 32 bytes")
+        raise ValueError("ExpandA: rho must be 32 bytes")
+
     A: List[List[Poly]] = []
     for r in range(params.k):
         row: List[Poly] = []
-        for s in range(params.l):
-            seed = rho + bytes([s, r])
+        for c in range(params.l):
+            seed = rho + bytes([c, r])
             row.append(RejNttPoly(seed))
         A.append(row)
     return A
 
 
-def ExpandS(rho: bytes, params: MLDSAParams) -> Tuple[Vector, Vector]:
-    """ExpandS (Algorithm 33): sinh ``s1`` (l đa thức) và ``s2`` (k đa thức).
+def ExpandS(rho_prime: bytes, params: MLDSAParams) -> Tuple[Vector, Vector]:
+    """Algorithm 33: ExpandS."""
+    if len(rho_prime) != 64:
+        raise ValueError("ExpandS: rho_prime must be 64 bytes")
 
-    Tham số ``rho`` ở đây là ``ρ'`` 64 byte. Mỗi đa thức được seed bằng
-    ``ρ' || u`` với ``u`` là chỉ số 2-byte little-endian; ``s1`` chiếm
-    chỉ số ``[0, l)`` và ``s2`` chiếm ``[l, l + k)``.
-    """
-    if len(rho) != 64:
-        raise ValueError("expand_s: rho must be 64 bytes")
     s1: Vector = []
-    for r in range(params.l):
-        seed = rho + IntegerToBytes(r, 2)
+    for i in range(params.l):
+        seed = rho_prime + i.to_bytes(2, byteorder="little")
         s1.append(RejBoundedPoly(seed, params.eta))
+
     s2: Vector = []
-    for r in range(params.k):
-        seed = rho + IntegerToBytes(r + params.l, 2)
+    for i in range(params.k):
+        seed = rho_prime + (params.l + i).to_bytes(2, byteorder="little")
         s2.append(RejBoundedPoly(seed, params.eta))
+
     return s1, s2
 
 
 def ExpandMask(rho_pp: bytes, mu_counter: int, params: MLDSAParams) -> Vector:
-    """ExpandMask (Algorithm 34): sinh mặt nạ ``y`` cho vòng ký.
-
-    Mỗi đa thức của ``y`` được tạo từ ``SHAKE-256(rho'' || κ)`` rồi
-    ``BitUnpack`` thành các hệ số trong ``[-(γ1 - 1), γ1]``. ``κ``
-    được tăng theo bước ``params.l`` ở mỗi lần reject để tránh tái sử
-    dụng cùng seed.
-    """
+    """Algorithm 34: ExpandMask."""
     if len(rho_pp) != 64:
-        raise ValueError("expand_mask: rho'' must be 64 bytes")
-    c = params.gamma1_bits
+        raise ValueError("ExpandMask: rho'' must be 64 bytes")
+
     y: Vector = []
-    for r in range(params.l):
-        n = IntegerToBytes(mu_counter + r, 2)
-        v = _shake256(rho_pp + n, 32 * c)
-        y.append(BitUnpack(v, params.gamma1 - 1, params.gamma1))
+    for i in range(params.l):
+        nonce = mu_counter + i
+        seed = rho_pp + nonce.to_bytes(2, byteorder="little")
+
+        if params.gamma1 == (1 << 17):
+            stream = SHAKEStream(hashlib.shake_256, seed)
+            data = stream.read(576)
+            poly: Poly = []
+            for chunk_idx in range(64):
+                offset = chunk_idx * 9
+                v = int.from_bytes(data[offset : offset + 9], byteorder="little")
+                for shift in (0, 18, 36, 54):
+                    z = (v >> shift) & 0x3FFFF
+                    poly.append(params.gamma1 - z)
+            y.append(poly)
+        elif params.gamma1 == (1 << 19):
+            stream = SHAKEStream(hashlib.shake_256, seed)
+            data = stream.read(640)
+            poly = []
+            for chunk_idx in range(128):
+                offset = chunk_idx * 5
+                v = int.from_bytes(data[offset : offset + 5], byteorder="little")
+                for shift in (0, 20):
+                    z = (v >> shift) & 0xFFFFF
+                    poly.append(params.gamma1 - z)
+            y.append(poly)
+        else:
+            raise ValueError("gamma1 must be 2^17 or 2^19")
     return y
 
 
 def SampleInBall(rho: bytes, params: MLDSAParams) -> Poly:
-    """SampleInBall (Algorithm 29): sinh challenge ``c`` với τ hệ số ±1.
-
-    Thuật toán Fisher-Yates ngược: với ``i = N - τ .. N - 1`` ta sinh
-    ngẫu nhiên ``j ≤ i``, hoán đổi ``c[i] ↔ c[j]`` và gán ``c[j] = ±1``
-    theo bit dấu lấy từ 8 byte đầu của stream. Kết quả: đúng τ hệ số
-    khác 0 phân bố đều, mỗi hệ số có dấu độc lập.
-    """
+    """Algorithm 29: SampleInBall."""
     if len(rho) != params.c_tilde_bytes:
         raise ValueError(
-            f"sample_in_ball: expected {params.c_tilde_bytes} bytes, got {len(rho)}"
+            f"SampleInBall: expected {params.c_tilde_bytes} bytes, got {len(rho)}"
         )
+
     tau = params.tau
     c: Poly = [0] * N
     stream = SHAKEStream(hashlib.shake_256, rho)
-    sign_bytes = stream.read(8)
-    sign_bits: List[int] = []
-    for byte in sign_bytes:
-        for k in range(8):
-            sign_bits.append((byte >> k) & 1)
+    s = stream.read(8)
+
+    h: List[int] = []
+    for b in s:
+        for bit in range(8):
+            h.append((b >> bit) & 1)
+
     for i in range(N - tau, N):
-        # Lấy mẫu ``j`` đến khi ``j ≤ i`` (bỏ qua mẫu vượt giới hạn).
         while True:
             j = stream.read(1)[0]
             if j <= i:
                 break
+
         c[i] = c[j]
-        bit = sign_bits[i + tau - N]
-        # bit 0 → +1, bit 1 → -1 (biểu diễn -1 trong ``[0, q)`` là q - 1).
-        c[j] = 1 if bit == 0 else Q - 1
+        c[j] = 1 - 2 * h[i + tau - N]
+
     return c
 
 
 def HShake256(data: bytes, length: int) -> bytes:
-    """Hàm băm chính trong ML-DSA (SHAKE-256 squeeze ``length`` byte)."""
-    return _shake256(data, length)
+    return hashlib.shake_256(data).digest(length)
 
 
 def GShake128(data: bytes, length: int) -> bytes:
-    """Hàm băm phụ trợ (SHAKE-128) — chủ yếu phục vụ test/util."""
-    return _shake128(data, length)
+    return hashlib.shake_128(data).digest(length)
 
 
 __all__ = [

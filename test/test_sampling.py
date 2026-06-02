@@ -149,7 +149,7 @@ def test_sample_in_ball_has_tau_nonzero_entries():
         nonzero = sum(1 for x in c if x != 0)
         assert nonzero == params.tau
         for x in c:
-            assert x in (0, 1, Q - 1)
+            assert x in (-1, 0, 1)
 
 
 def test_sample_in_ball_deterministic_for_same_seed():
