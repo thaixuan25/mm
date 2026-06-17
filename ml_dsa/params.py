@@ -48,7 +48,9 @@ class MLDSAParams:
     - ``gamma1``: biên cho mặt nạ ``y`` (cũng là biên cho ``z``).
     - ``gamma2``: biên dùng trong Decompose / HighBits / LowBits.
     - ``omega``: giới hạn số bit hint = 1 trên toàn vector.
-    - ``lam``: tham số an toàn (bit). Quyết định độ dài ``c_tilde``.
+    - ``lam``: tham số quyết định độ dài commitment ``c_tilde`` (collision
+      strength); ``c_tilde_bytes = lam / 4``. KHÔNG phải mức an toàn bit cổ
+      điển — mức an toàn NIST tương ứng là 2/3/5.
     """
 
     name: str

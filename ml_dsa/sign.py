@@ -1,12 +1,3 @@
-"""ML-DSA.Sign / Sign_internal (FIPS 204 §6.2, Algorithm 2 & 7).
-
-Hàm ký dùng kỹ thuật "Fiat-Shamir with aborts": lặp lại quá trình sinh
-mặt nạ ``y`` tới khi ``z = y + c·s1`` và ``r0 = LowBits(w - c·s2)`` đủ
-nhỏ; nếu không đủ nhỏ, lặp lại với ``kappa`` mới (tăng theo bội số
-``params.l``). Cách lặp này giữ cho phân phối ``z`` không tiết lộ
-``s1`` (zero-knowledge).
-"""
-
 from __future__ import annotations
 
 import os
@@ -59,20 +50,8 @@ def _hint_popcount(h):
 def Sign_internal(
     sk: bytes, message_prime: bytes, rnd: bytes, params: MLDSAParams
 ) -> bytes:
-    """Sign_internal (Algorithm 7).
-
-    Parameters
-    ----------
-    sk:
-        Secret key đã encode (bytes), độ dài ``params.sk_bytes``.
-    message_prime:
-        Thông điệp đã được tiền xử lý theo Algorithm 2 (gồm domain
-        separator + context + message). Phải dùng cùng tiền xử lý với
-        bên xác thực.
-    rnd:
-        32 byte ngẫu nhiên (sử dụng ``b"\\x00" * 32`` cho deterministic).
-    params:
-        Bộ tham số ML-DSA tương ứng.
+    """
+    Sign_internal (Algorithm 7).
     """
     if len(rnd) != 32:
         raise ValueError("sign_internal: rnd must be 32 bytes")
@@ -162,27 +141,8 @@ def Sign(
     rnd: Optional[bytes] = None,
     pre_hash: Optional[str] = None,
 ) -> bytes:
-    """ML-DSA.Sign (Algorithm 2).
-
-    Parameters
-    ----------
-    sk:
-        Secret key đã encode.
-    message:
-        Thông điệp gốc.
-    params:
-        Bộ tham số ML-DSA.
-    ctx:
-        Chuỗi context tuỳ chọn (≤ 255 byte) giúp domain separation giữa
-        các giao thức/ứng dụng dùng chung khoá.
-    deterministic:
-        Khi True, dùng rnd toàn 0 — chữ ký sẽ lặp lại nếu thông điệp và
-        khoá giống nhau. Hữu ích cho test KAT.
-    rnd:
-        Override rnd 32 byte cụ thể; ưu tiên hơn cờ ``deterministic``.
-    pre_hash:
-        ``None`` giữ mode ``pure``. Khi truyền tên hash (ví dụ
-        ``"sha256"``), dùng định dạng HashML-DSA với domain separator 1.
+    """
+    ML-DSA.Sign (Algorithm 2).
     """
     message_prime = FormatMessagePrime(message, ctx, pre_hash=pre_hash)
     if rnd is None:

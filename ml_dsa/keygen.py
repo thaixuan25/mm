@@ -12,20 +12,8 @@ from .sampling import HShake256, ExpandA, ExpandS
 
 
 def KeyGen_internal(xi: bytes, params: MLDSAParams) -> Tuple[bytes, bytes]:
-    """KeyGen_internal (Algorithm 6) với seed ``xi`` xác định.
-
-    Parameters
-    ----------
-    xi:
-        32 byte seed. Trong chế độ thường, ``xi`` là output của TRNG; đối
-        với KAT, ``xi`` được chỉ định trước.
-    params:
-        Bộ tham số ML-DSA tương ứng (44/65/87).
-
-    Returns
-    -------
-    (pk, sk):
-        Public key đã encode (bytes) và secret key đã encode (bytes).
+    """
+    KeyGen_internal (Algorithm 6) với seed ``xi``
     """
     if len(xi) != 32:
         raise ValueError("keygen_internal: xi must be 32 bytes")
@@ -60,10 +48,8 @@ def KeyGen_internal(xi: bytes, params: MLDSAParams) -> Tuple[bytes, bytes]:
 def KeyGen(
     params: MLDSAParams, *, xi: Optional[bytes] = None
 ) -> Tuple[bytes, bytes]:
-    """Sinh cặp khóa ML-DSA.
-
-    Khi ``xi`` không được truyền, hàm tự lấy 32 byte ngẫu nhiên từ
-    ``os.urandom`` (CSPRNG do hệ điều hành cung cấp).
+    """
+    Sinh cặp khóa ML-DSA.
     """
     if xi is None:
         xi = os.urandom(32)

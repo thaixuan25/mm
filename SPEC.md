@@ -33,22 +33,22 @@ Kích thước (byte): `pk`, `sk`, `sig` được tính từ các tham số trê
 | §7.2 Sign / Sign_internal | `ml_dsa/sign.py:sign`, `sign_internal` |
 | §7.3 Verify / Verify_internal | `ml_dsa/verify.py:verify`, `verify_internal` |
 | Algorithm 4/5 HashML-DSA Sign/Verify | `ml_dsa/prehash.py:format_message_prime` + `pre_hash` trong `sign/verify` |
-| Algorithm 35 NTT | `ml_dsa/ntt.py:ntt` |
-| Algorithm 36 NTT^{-1} | `ml_dsa/ntt.py:intt` |
-| Algorithm 30 ExpandA | `ml_dsa/sampling.py:expand_a` |
+| Algorithm 41 NTT | `ml_dsa/ntt.py:ntt` |
+| Algorithm 42 NTT^{-1} | `ml_dsa/ntt.py:intt` |
+| Algorithm 32 ExpandA | `ml_dsa/sampling.py:expand_a` |
 | Algorithm 33 ExpandS | `ml_dsa/sampling.py:expand_s` |
 | Algorithm 34 ExpandMask | `ml_dsa/sampling.py:expand_mask` |
 | Algorithm 29 SampleInBall | `ml_dsa/sampling.py:sample_in_ball` |
-| Algorithm 31 RejNTTPoly | `ml_dsa/sampling.py:rej_ntt_poly` |
-| Algorithm 32 RejBoundedPoly | `ml_dsa/sampling.py:rej_bounded_poly` |
+| Algorithm 30 RejNTTPoly | `ml_dsa/sampling.py:rej_ntt_poly` |
+| Algorithm 31 RejBoundedPoly | `ml_dsa/sampling.py:rej_bounded_poly` |
 | Algorithm 35 Power2Round | `ml_dsa/reduction.py:power2round` |
 | Algorithm 36 Decompose | `ml_dsa/reduction.py:decompose` |
 | Algorithm 37 HighBits | `ml_dsa/reduction.py:high_bits` |
 | Algorithm 38 LowBits | `ml_dsa/reduction.py:low_bits` |
 | Algorithm 39 MakeHint | `ml_dsa/reduction.py:make_hint` |
 | Algorithm 40 UseHint | `ml_dsa/reduction.py:use_hint` |
-| Algorithm 16/17 BitPack/BitUnpack | `ml_dsa/encoding.py:bit_pack`, `bit_unpack` |
-| Algorithm 18/19 SimpleBitPack/SimpleBitUnpack | `ml_dsa/encoding.py:simple_bit_pack`, `simple_bit_unpack` |
+| Algorithm 16/18 SimpleBitPack/SimpleBitUnpack | `ml_dsa/encoding.py:simple_bit_pack`, `simple_bit_unpack` |
+| Algorithm 17/19 BitPack/BitUnpack | `ml_dsa/encoding.py:bit_pack`, `bit_unpack` |
 | Algorithm 20 HintBitPack | `ml_dsa/encoding.py:hint_bit_pack` |
 | Algorithm 21 HintBitUnpack | `ml_dsa/encoding.py:hint_bit_unpack` |
 | Algorithm 22 pkEncode | `ml_dsa/encoding.py:pk_encode` |
@@ -78,7 +78,7 @@ Kích thước (byte): `pk`, `sk`, `sig` được tính từ các tham số trê
 
 1. NTT đảo: `INTT(NTT(a)) == a` cho mọi đa thức ngẫu nhiên.
 2. Tương đương phép nhân: `INTT(NTT(a) ∘ NTT(b)) == a · b mod (X^n+1)`.
-3. Round-trip encode: `decode(encode(x)) == x` cho pk, sk, sig, hint.
+3. Mã hóa khứ hồi: `decode(encode(x)) == x` cho pk, sk, sig, hint.
 4. Tự nhất quán: `verify(pk, m, sign(sk, m)) == True`.
 5. Sửa chữa ký/thông điệp/khóa → verify trả về False.
 6. Tính quyết định khi seed cố định (deterministic mode).

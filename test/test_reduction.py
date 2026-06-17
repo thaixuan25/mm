@@ -37,9 +37,9 @@ def test_decompose_identity_for_44():
     for _ in range(200):
         r = rng.randint(0, Q - 1)
         r1, r0 = Decompose(r, gamma2)
-        assert -gamma2 < r0 <= gamma2 or (r0 == r0)
         m = (Q - 1) // (2 * gamma2)
-        assert 0 <= r1 < m or r1 == 0
+        assert -gamma2 <= r0 <= gamma2
+        assert 0 <= r1 < m
         assert (r1 * (2 * gamma2) + r0) % Q == r
 
 
@@ -49,6 +49,9 @@ def test_decompose_identity_for_65():
     for _ in range(200):
         r = rng.randint(0, Q - 1)
         r1, r0 = Decompose(r, gamma2)
+        m = (Q - 1) // (2 * gamma2)
+        assert -gamma2 <= r0 <= gamma2
+        assert 0 <= r1 < m
         assert (r1 * (2 * gamma2) + r0) % Q == r
 
 

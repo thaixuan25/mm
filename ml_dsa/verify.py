@@ -1,11 +1,3 @@
-"""ML-DSA.Verify / Verify_internal (FIPS 204 §6.3, Algorithm 3 & 8).
-
-Verifier tái lập ``w1'`` từ ``z`` và ``c`` rồi kiểm tra
-``H(mu, w1') == c_tilde``. Vì verifier không có ``t0``, hint ``h``
-được dùng để bù phần sai lệch nhỏ giữa ``HighBits(w - c·s2)`` và
-``HighBits(A·z - c·t1·2^d)``.
-"""
-
 from __future__ import annotations
 
 from .encoding import pkDecode, sigDecode, w1Encode
@@ -34,14 +26,8 @@ def _hint_popcount(h):
 def Verify_internal(
     pk: bytes, message_prime: bytes, sig: bytes, params: MLDSAParams
 ) -> bool:
-    """Verify_internal (Algorithm 8).
-
-    Trả về True khi cả ba điều kiện sau cùng thỏa mãn:
-
-    1. ``sig`` decode hợp lệ và có popcount(h) ≤ omega.
-    2. ``||z||_∞ < γ1 - β``.
-    3. ``H(mu || w1Encode(UseHint(h, A·z - c·t1·2^d)))`` trùng với
-       ``c_tilde`` trong chữ ký.
+    """
+    Verify_internal (Algorithm 8).
     """
     decoded_sig = sigDecode(sig, params)
     if decoded_sig is None:
@@ -95,11 +81,8 @@ def Verify(
     ctx: bytes = b"",
     pre_hash: str | None = None,
 ) -> bool:
-    """ML-DSA.Verify (Algorithm 3).
-
-    Hàm này từ chối thay vì raise khi gặp dữ liệu sai dạng (sai độ dài
-    pk/sig hoặc context > 255 byte) để hành vi xác thực luôn trả về bool
-    đơn giản, tránh tạo nhánh ngoại lệ ảnh hưởng tới timing.
+    """
+    ML-DSA.Verify (Algorithm 3).
     """
     if len(ctx) > 255:
         return False

@@ -57,9 +57,9 @@ def test_ntt_pointwise_matches_schoolbook():
     assert actual == expected
 
 
-def test_ntt_pointwise_two_random_pairs():
+def test_ntt_pointwise_random_pairs():
     rng = random.Random(99)
-    for _ in range(3):
+    for _ in range(10):
         a = [rng.randint(0, Q - 1) for _ in range(N)]
         b = [rng.randint(0, Q - 1) for _ in range(N)]
         expected = PolySchoolbookMul(a, b)
